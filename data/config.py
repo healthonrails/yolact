@@ -137,6 +137,32 @@ coco2014_dataset = dataset_base.copy({
     'label_map': COCO_LABEL_MAP
 })
 
+coco_mouse_dataset = dataset_base.copy({
+    'name': 'COCO Mouse',
+    
+    'train_info': r'C:\Users\hinde\Desktop\yolact\dataset\dataset_mouse_coco\annotations.json',
+    'train_images': r'C:\Users\hinde\Desktop\yolact\dataset\dataset_mouse_coco',
+    'valid_info': r'C:\Users\hinde\Desktop\yolact\dataset\dataset_mouse_coco\annotations.json',
+    'valid_images': r'C:\Users\hinde\Desktop\yolact\dataset\dataset_mouse_coco',
+    'class_names': ('mouse'),
+    'label_map': {1: 1}
+    
+})
+
+
+cell_detection_dataset = dataset_base.copy({
+    'name': 'Cell Detection Dataset',
+
+    'train_images': 'C:/Users/hinde/Desktop/micro_vision_data/coco/train2017',
+    'train_info':   'C:/Users/hinde/Desktop/micro_vision_data/coco/annotations/instances_train2017.json',
+
+    'valid_images': 'C:/Users/hinde/Desktop/micro_vision_data/coco/val2017',
+    'valid_info':   'C:/Users/hinde/Desktop/micro_vision_data/coco/annotations/instances_val2017.json',
+
+    'has_gt': True,
+    'class_names': ("cell - neuroblastoma phalloidin dapi","cell - neuroblastoma phalloidin")
+})
+
 coco2017_dataset = dataset_base.copy({
     'name': 'COCO 2017',
     
@@ -765,6 +791,13 @@ yolact_resnet50_pascal_config = yolact_resnet50_config.copy({
         'pred_scales': [[32], [64], [128], [256], [512]],
         'use_square_anchors': False,
     })
+})
+
+yolact_resnet50_mouse_config = yolact_resnet50_config.copy({
+    'name': 'yolact_plus_resnet50_mouse',
+    'dataset': coco_mouse_dataset,
+    'num_classes' : len(coco_mouse_dataset.class_names) + 1,
+    'max_size': 512
 })
 
 # ----------------------- YOLACT++ CONFIGS ----------------------- #

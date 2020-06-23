@@ -26,8 +26,19 @@ from pathlib import Path
 from collections import OrderedDict
 from PIL import Image
 
+os.environ['KMP_DUPLICATE_LIB_OK']='True'
+
 import matplotlib.pyplot as plt
 import cv2
+
+### Test for tracking the detected objects
+from utils.parser import get_config
+from deep_sort import build_tracker
+
+
+cfg_tracker = get_config()
+tracker = None
+
 
 def str2bool(v):
     if v.lower() in ('yes', 'true', 't', 'y', '1'):
@@ -113,6 +124,10 @@ def parse_args(argv=None):
                         help='When displaying / saving video, draw the FPS on the frame')
     parser.add_argument('--emulate_playback', default=False, dest='emulate_playback', action='store_true',
                         help='When saving a video, emulate the framerate that you\'d get running in real-time mode.')
+    parser.add_argument('--config_detection',type=str,default=r"C:\Users\hinde\Desktop\yolact\configs\yolov3.yaml")
+    parser.add_argument('--config_deepsort',type=str, default=r"C:\Users\hinde\Desktop\yolact\configs\deep_sort.yaml")
+
+                    
 
     parser.set_defaults(no_bar=False, display=False, resume=False, output_coco_json=False, output_web_json=False, shuffle=False,
                         benchmark=False, no_sort=False, no_hash=False, mask_proto_debug=False, crop=True, detect=False, display_fps=False,
@@ -120,6 +135,13 @@ def parse_args(argv=None):
 
     global args
     args = parser.parse_args(argv)
+
+    cfg_tracker.merge_from_file(args.config_detection)
+    cfg_tracker.merge_from_file(args.config_deepsort)
+    
+    global tracker
+
+    tracker = build_tracker(cfg_tracker,use_cuda=args.cuda)
 
     if args.output_web_json:
         args.output_coco_json = True
@@ -132,7 +154,7 @@ coco_cats = {} # Call prep_coco_cats to fill this
 coco_cats_inv = {}
 color_cache = defaultdict(lambda: {})
 
-def prep_display(dets_out, img, h, w, undo_transform=True, class_color=False, mask_alpha=0.45, fps_str=''):
+def prep_display(dets_out, img, h, w, undo_transform=True, class_color=True, mask_alpha=0.45, fps_str=''):
     """
     Note: If undo_transform=False then im_h and im_w are allowed to be None.
     """
@@ -158,6 +180,13 @@ def prep_display(dets_out, img, h, w, undo_transform=True, class_color=False, ma
             # Masks are drawn on the GPU, so don't copy
             masks = t[3][idx]
         classes, scores, boxes = [x[idx].cpu().numpy() for x in t[:3]]
+        outputs = tracker.update(boxes, scores, img.cpu().numpy())
+        if len(outputs) > 0:
+            identities = outputs[:,-1]
+        else:
+            identities = []
+
+        #print(f"outputs: {outputs}")
 
     num_dets_to_consider = min(args.top_k, classes.shape[0])
     for j in range(num_dets_to_consider):
@@ -169,8 +198,8 @@ def prep_display(dets_out, img, h, w, undo_transform=True, class_color=False, ma
     # Also keeps track of a per-gpu color cache for maximum speed
     def get_color(j, on_gpu=None):
         global color_cache
-        color_idx = (classes[j] * 5 if class_color else j * 5) % len(COLORS)
-        
+        color_idx = (j * 5 if class_color else j * 5) % len(COLORS)
+        #print(f"num of class : {classes} and {color_idx}")
         if on_gpu is not None and color_idx in color_cache[on_gpu]:
             return color_cache[on_gpu][color_idx]
         else:
@@ -185,6 +214,8 @@ def prep_display(dets_out, img, h, w, undo_transform=True, class_color=False, ma
 
     # First, draw the masks on the GPU where we can do it really fast
     # Beware: very fast but possibly unintelligible mask-drawing code ahead
+    
+
     # I wish I had access to OpenGL or Vulkan but alas, I guess Pytorch tensor operations will have to suffice
     if args.display_masks and cfg.eval_mask_branch and num_dets_to_consider > 0:
         # After this, mask is of size [num_dets, h, w, 1]
@@ -193,6 +224,7 @@ def prep_display(dets_out, img, h, w, undo_transform=True, class_color=False, ma
         # Prepare the RGB images for each mask given their color (size [num_dets, h, w, 1])
         colors = torch.cat([get_color(j, on_gpu=img_gpu.device.index).view(1, 1, 1, 3) for j in range(num_dets_to_consider)], dim=0)
         masks_color = masks.repeat(1, 1, 1, 3) * colors * mask_alpha
+
 
         # This is 1 everywhere except for 1-mask_alpha where the mask is
         inv_alph_masks = masks * (-mask_alpha) + 1
@@ -236,16 +268,21 @@ def prep_display(dets_out, img, h, w, undo_transform=True, class_color=False, ma
     if args.display_text or args.display_bboxes:
         for j in reversed(range(num_dets_to_consider)):
             x1, y1, x2, y2 = boxes[j, :]
+           
+
+            upper_bound = y2 - y1
             color = get_color(j)
             score = scores[j]
 
-            if args.display_bboxes:
+            if args.display_bboxes and upper_bound < 500:
                 cv2.rectangle(img_numpy, (x1, y1), (x2, y2), color, 1)
 
             if args.display_text:
                 _class = cfg.dataset.class_names[classes[j]]
                 text_str = '%s: %.2f' % (_class, score) if args.display_scores else _class
-
+                
+                if len(identities) > 0 and len(identities) == len(scores):
+                    text_str = f"Instance ID: {identities[j]} {text_str}"
                 font_face = cv2.FONT_HERSHEY_DUPLEX
                 font_scale = 0.6
                 font_thickness = 1
