@@ -129,12 +129,14 @@ def parse_args(argv=None):
                         help='When saving a video, emulate the framerate that you\'d get running in real-time mode.')
     parser.add_argument('--config_detection',type=str,default=r"C:\Users\hinde\Desktop\yolact\configs\yolov3.yaml")
     parser.add_argument('--config_deepsort',type=str, default=r"C:\Users\hinde\Desktop\yolact\configs\deep_sort.yaml")
+    parser.add_argument('--mot',default=False, dest='mot', action='store_true',
+                        help="Multi Object Tracking")
 
                     
 
     parser.set_defaults(no_bar=False, display=False, resume=False, output_coco_json=False, output_web_json=False, shuffle=False,
                         benchmark=False, no_sort=False, no_hash=False, mask_proto_debug=False, crop=True, detect=False, display_fps=False,
-                        emulate_playback=False)
+                        emulate_playback=False,mot=False)
 
     global args
     args = parser.parse_args(argv)
@@ -290,7 +292,13 @@ def prep_display(dets_out, img, h, w, undo_transform=True, class_color=True, mas
                 text_str = '%s: %.2f' % (_class, score) if args.display_scores else _class
                 
                 if len(identities) > 0 and len(identities) == len(scores):
-                    text_str = f"Instance ID: {int(identities[j])} {text_str}"
+                    if args.mot:
+                        text_str = f"Instance ID: {int(identities[j])} {text_str}"
+                    
+                if not args.mot:
+                    text_str = f"Instance ID: {1} {text_str}"
+
+
                 font_face = cv2.FONT_HERSHEY_DUPLEX
                 font_scale = 0.6
                 font_thickness = 1
