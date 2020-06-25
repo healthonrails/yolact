@@ -149,6 +149,17 @@ coco_mouse_dataset = dataset_base.copy({
     
 })
 
+coco_vole_dataset = dataset_base.copy({
+    'name': 'COCO Vole',
+    
+    'train_info': r'C:\Users\hinde\Desktop\yolact\dataset\dataset_vole_coco\annotations.json',
+    'train_images': r'C:\Users\hinde\Desktop\yolact\dataset\dataset_vole_coco',
+    'valid_info': r'C:\Users\hinde\Desktop\yolact\dataset\dataset_vole_coco\annotations.json',
+    'valid_images': r'C:\Users\hinde\Desktop\yolact\dataset\dataset_vole_coco',
+    'class_names': ('vole','mouse'),
+    'label_map': {1: 1,2:2}
+    
+})
 
 cell_detection_dataset = dataset_base.copy({
     'name': 'Cell Detection Dataset',
@@ -797,6 +808,13 @@ yolact_resnet50_mouse_config = yolact_resnet50_config.copy({
     'name': 'yolact_plus_resnet50_mouse',
     'dataset': coco_mouse_dataset,
     'num_classes' : len(coco_mouse_dataset.class_names) + 1,
+    'max_size': 512
+})
+
+yolact_resnet50_vole_config = yolact_resnet50_config.copy({
+    'name': 'yolact_plus_resnet50_vole',
+    'dataset': coco_vole_dataset,
+    'num_classes' : len(coco_vole_dataset.class_names) + 1,
     'max_size': 512
 })
 

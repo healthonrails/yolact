@@ -34,7 +34,10 @@ import cv2
 ### Test for tracking the detected objects
 from utils.parser import get_config
 from deep_sort import build_tracker
+from deep_sort.sort import sort
 
+
+#mot_tracker = sort.Sort(max_age=70,min_hits=3)
 
 cfg_tracker = get_config()
 tracker = None
@@ -181,6 +184,11 @@ def prep_display(dets_out, img, h, w, undo_transform=True, class_color=True, mas
             masks = t[3][idx]
         classes, scores, boxes = [x[idx].cpu().numpy() for x in t[:3]]
         outputs = tracker.update(boxes, scores, img.cpu().numpy())
+
+        #detections = [[*box,scores[i]] for i,box in enumerate(boxes)]
+        #print(detections)
+        #outputs = mot_tracker.update(np.array(detections))
+        #print(track_ids)
         if len(outputs) > 0:
             identities = outputs[:,-1]
         else:
@@ -282,7 +290,7 @@ def prep_display(dets_out, img, h, w, undo_transform=True, class_color=True, mas
                 text_str = '%s: %.2f' % (_class, score) if args.display_scores else _class
                 
                 if len(identities) > 0 and len(identities) == len(scores):
-                    text_str = f"Instance ID: {identities[j]} {text_str}"
+                    text_str = f"Instance ID: {int(identities[j])} {text_str}"
                 font_face = cv2.FONT_HERSHEY_DUPLEX
                 font_scale = 0.6
                 font_thickness = 1
