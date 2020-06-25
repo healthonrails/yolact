@@ -185,7 +185,7 @@ def prep_display(dets_out, img, h, w, undo_transform=True, class_color=True, mas
             # Masks are drawn on the GPU, so don't copy
             masks = t[3][idx]
         classes, scores, boxes = [x[idx].cpu().numpy() for x in t[:3]]
-        outputs = tracker.update(boxes, scores, img.cpu().numpy())
+        outputs = tracker.update(boxes, scores, img.cpu().numpy(),xyxy=True)
 
         #detections = [[*box,scores[i]] for i,box in enumerate(boxes)]
         #print(detections)
