@@ -2,9 +2,12 @@ DEEPSORT:
   REID_CKPT: "./deep_sort/deep/checkpoint/ckpt.t7"
   MAX_DIST: 0.2
   MIN_CONFIDENCE: 0.3
-  NMS_MAX_OVERLAP: 0.5
-  MAX_IOU_DISTANCE: 0.7
+  NMS_MAX_OVERLAP: 1.0
+  MAX_IOU_DISTANCE: 0.5
+  # max num of frames a track lives
   MAX_AGE: 70
+  # A Track will be confirmed if the number of matching is > n_init
   N_INIT: 3
+  #length of features
   NN_BUDGET: 100
   

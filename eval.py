@@ -193,6 +193,7 @@ def prep_display(dets_out, img, h, w, undo_transform=True, class_color=True, mas
         #print(track_ids)
         if len(outputs) > 0:
             identities = outputs[:,-1]
+            boxes = outputs[:,0:-1]
         else:
             identities = []
 
@@ -276,19 +277,26 @@ def prep_display(dets_out, img, h, w, undo_transform=True, class_color=True, mas
         return img_numpy
 
     if args.display_text or args.display_bboxes:
-        for j in reversed(range(num_dets_to_consider)):
+        for j in reversed(range(len(boxes))):
             x1, y1, x2, y2 = boxes[j, :]
            
 
             upper_bound = y2 - y1
             color = get_color(j)
-            score = scores[j]
+            try:
+                score = scores[j]
+            except:
+                score = 0
 
             if args.display_bboxes and upper_bound < 500:
                 cv2.rectangle(img_numpy, (x1, y1), (x2, y2), color, 1)
 
             if args.display_text:
-                _class = cfg.dataset.class_names[classes[j]]
+                try:
+                    _class = cfg.dataset.class_names[classes[j]]
+                except:
+                    _class = cfg.dataset.class_names[classes[0]]
+
                 text_str = '%s: %.2f' % (_class, score) if args.display_scores else _class
                 
                 if len(identities) > 0 and len(identities) == len(scores):

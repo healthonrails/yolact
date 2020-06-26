@@ -41,6 +41,9 @@ class KalmanFilter(object):
         ndim, dt = 4, 1.
 
         # Create Kalman filter model matrices.
+        # Constanct Velocity Model
+        # cx' = cx + dt*vx
+        # cy' = cy + dt*vy  
         self._motion_mat = np.eye(2 * ndim, 2 * ndim)
         for i in range(ndim):
             self._motion_mat[i, ndim + i] = dt
@@ -114,9 +117,13 @@ class KalmanFilter(object):
             self._std_weight_velocity * mean[3],
             1e-5,
             self._std_weight_velocity * mean[3]]
+
+        # init Q
         motion_cov = np.diag(np.square(np.r_[std_pos, std_vel]))
 
+        # x' = Fx
         mean = np.dot(self._motion_mat, mean)
+        # P' = FPF.T + Q
         covariance = np.linalg.multi_dot((
             self._motion_mat, covariance, self._motion_mat.T)) + motion_cov
 

@@ -29,12 +29,9 @@ class DeepSort(object):
         if xyxy and len(bbox_xywh) > 0:
             bbox_tlwh = [self._xyxy_to_tlwh(bbox_) for bbox_ in bbox_xywh]
             features = self._get_features(bbox_tlwh, ori_img)
-            #bbox_tlwh = self._xywh_to_tlwh(_bbox_tlwhs)
         else:
             bbox_tlwh = self._xywh_to_tlwh(bbox_xywh)
             features = self._get_features(bbox_tlwh, ori_img)
-        
-
         
         detections = [Detection(bbox_tlwh[i], conf, features[i]) for i,conf in enumerate(confidences) if conf>self.min_confidence]
 
