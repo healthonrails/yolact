@@ -26,6 +26,11 @@ from pathlib import Path
 from collections import OrderedDict
 from PIL import Image
 
+import pandas as pd
+
+res = []
+
+
 os.environ['KMP_DUPLICATE_LIB_OK']='True'
 
 import matplotlib.pyplot as plt
@@ -37,7 +42,7 @@ from deep_sort import build_tracker
 from deep_sort.sort import sort
 
 
-#mot_tracker = sort.Sort(max_age=70,min_hits=3)
+mot_tracker = sort.Sort(max_age=70,min_hits=3)
 
 cfg_tracker = get_config()
 tracker = None
@@ -159,7 +164,18 @@ coco_cats = {} # Call prep_coco_cats to fill this
 coco_cats_inv = {}
 color_cache = defaultdict(lambda: {})
 
-def prep_display(dets_out, img, h, w, undo_transform=True, class_color=True, mask_alpha=0.45, fps_str=''):
+def _save_bbox_image(bbox_xyxy, ori_img, 
+      class_name,
+     data_dir='reid_dataset'):
+    class_folder = os.path.join(data_dir,class_name)
+    if not os.path.exists(class_folder):
+        os.makedirs(class_folder)
+    x1,y1,x2,y2 = bbox_xyxy
+    im = ori_img[y1:y2,x1:x2]
+    cv2.imwrite(f"{class_folder}/{x1}_{y1}_{x2}_{y2}.jpg",im)
+
+def prep_display(dets_out, img, h, w, undo_transform=True,
+ class_color=True, mask_alpha=0.45, fps_str='',flows=None):
     """
     Note: If undo_transform=False then im_h and im_w are allowed to be None.
     """
@@ -185,15 +201,16 @@ def prep_display(dets_out, img, h, w, undo_transform=True, class_color=True, mas
             # Masks are drawn on the GPU, so don't copy
             masks = t[3][idx]
         classes, scores, boxes = [x[idx].cpu().numpy() for x in t[:3]]
-        outputs = tracker.update(boxes, scores, img.cpu().numpy(),xyxy=True)
+        
+        outputs = tracker.update(boxes, scores, img.cpu().numpy(),flows=flows,xyxy=True)
+ 
+        
+        # detections = [[*box,scores[i]] for i,box in enumerate(boxes)]
+        # outputs = mot_tracker.update(np.array(detections))
 
-        #detections = [[*box,scores[i]] for i,box in enumerate(boxes)]
-        #print(detections)
-        #outputs = mot_tracker.update(np.array(detections))
-        #print(track_ids)
         if len(outputs) > 0:
             identities = outputs[:,-1]
-            boxes = outputs[:,0:-1]
+            #boxes = outputs[:,0:-1]
         else:
             identities = []
 
@@ -236,7 +253,6 @@ def prep_display(dets_out, img, h, w, undo_transform=True, class_color=True, mas
         colors = torch.cat([get_color(j, on_gpu=img_gpu.device.index).view(1, 1, 1, 3) for j in range(num_dets_to_consider)], dim=0)
         masks_color = masks.repeat(1, 1, 1, 3) * colors * mask_alpha
 
-
         # This is 1 everywhere except for 1-mask_alpha where the mask is
         inv_alph_masks = masks * (-mask_alpha) + 1
         
@@ -277,7 +293,8 @@ def prep_display(dets_out, img, h, w, undo_transform=True, class_color=True, mas
         return img_numpy
 
     if args.display_text or args.display_bboxes:
-        for j in reversed(range(len(boxes))):
+        num_boxes = len(boxes)
+        for j in reversed(range(num_boxes)):
             x1, y1, x2, y2 = boxes[j, :]
            
 
@@ -288,7 +305,7 @@ def prep_display(dets_out, img, h, w, undo_transform=True, class_color=True, mas
             except:
                 score = 0
 
-            if args.display_bboxes and upper_bound < 500:
+            if args.display_bboxes and upper_bound < 900:
                 cv2.rectangle(img_numpy, (x1, y1), (x2, y2), color, 1)
 
             if args.display_text:
@@ -299,9 +316,16 @@ def prep_display(dets_out, img, h, w, undo_transform=True, class_color=True, mas
 
                 text_str = '%s: %.2f' % (_class, score) if args.display_scores else _class
                 
+                
+                
                 if len(identities) > 0 and len(identities) == len(scores):
-                    if args.mot:
-                        text_str = f"Instance ID: {int(identities[j])} {text_str}"
+                    res.append((identities[j],_class,score,(x1,y1,x2,y2)))
+                    if args.mot and ('_1' in _class or '_2' in _class):
+                        id = identities[j]
+                        #id = min(num_boxes,min(int(identities[j]),int(_class.split('_')[-1])))
+                        text_str = f"Instance ID: {id} {_class.split('_')[0]}"
+
+                        #_save_bbox_image(boxes[j, :],img.cpu().numpy(),_class)
                     
                 if not args.mot:
                     text_str = f"Instance ID: {1} {text_str}"
@@ -750,6 +774,15 @@ def evalvideo(net:Yolact, path:str, out_path:str=None):
             frames.append(frame)
         return frames
 
+    if False:
+        current_frame = get_next_frame(vid)
+        
+        next_frame = get_next_frame(vid)
+        flows = cv2.calcOpticalFlowFarneback(cv2.cvtColor(current_frame[0],cv2.COLOR_BGR2GRAY)
+        ,cv2.cvtColor(next_frame[0],cv2.COLOR_BGR2GRAY)
+        , None, 0.5, 3, 15, 3, 5, 1.2, 0)
+        current_frame = next_frame
+
     def transform_frame(frames):
         with torch.no_grad():
             frames = [torch.from_numpy(frame).cuda().float() for frame in frames]
@@ -770,7 +803,10 @@ def evalvideo(net:Yolact, path:str, out_path:str=None):
     def prep_frame(inp, fps_str):
         with torch.no_grad():
             frame, preds = inp
-            return prep_display(preds, frame, None, None, undo_transform=False, class_color=True, fps_str=fps_str)
+            return prep_display(preds, frame, None, None, undo_transform=False, 
+            class_color=True, fps_str=fps_str,
+            flows=None
+            )
 
     frame_buffer = Queue()
     video_fps = 0
@@ -853,6 +889,7 @@ def evalvideo(net:Yolact, path:str, out_path:str=None):
 
     # Prime the network on the first frame because I do some thread unsafe things otherwise
     print('Initializing model... ', end='')
+
     first_batch = eval_network(transform_frame(get_next_frame(vid)))
     print('Done.')
 
@@ -1114,11 +1151,12 @@ if __name__ == '__main__':
         set_cfg(args.config)
 
     if args.trained_model == 'interrupt':
-        args.trained_model = SavePath.get_interrupt('weights/')
+        args.trained_model = SavePath.get_interrupt('weights')
     elif args.trained_model == 'latest':
-        args.trained_model = SavePath.get_latest('weights/', cfg.name)
+        args.trained_model = SavePath.get_latest('weights', cfg.name)
 
     if args.config is None:
+        pint(args.config)
         model_path = SavePath.from_str(args.trained_model)
         # TODO: Bad practice? Probably want to do a name lookup instead.
         args.config = model_path.model_name + '_config'
@@ -1156,7 +1194,10 @@ if __name__ == '__main__':
 
         print('Loading model...', end='')
         net = Yolact()
+        print('this is the path of the model')
+        print(args.trained_model)
         net.load_weights(args.trained_model)
+        #torch.save(net.state_dict(),f'weights\model_{os.path.basename(args.trained_model)}')
         net.eval()
         print(' Done.')
 
@@ -1164,5 +1205,11 @@ if __name__ == '__main__':
             net = net.cuda()
 
         evaluate(net, dataset)
+
+    df = pd.DataFrame(res)
+    print("write the results to a csv file...")
+    df.to_csv('tracking_results.csv')
+
+
 
 
