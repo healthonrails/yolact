@@ -40,6 +40,8 @@ class Track:
     feature : Optional[ndarray]
         Feature vector of the detection this track originates from. If not None,
         this feature is added to the `features` cache.
+    flow: Optional[ndarray]
+        2d flow 
 
     Attributes
     ----------
@@ -64,7 +66,7 @@ class Track:
     """
 
     def __init__(self, mean, covariance, track_id, n_init, max_age,
-                 feature=None):
+                 feature=None,flow=None):
         self.mean = mean
         self.covariance = covariance
         self.track_id = track_id
@@ -76,6 +78,11 @@ class Track:
         self.features = []
         if feature is not None:
             self.features.append(feature)
+
+        self.flows =[]
+
+        if flow is not None:
+            self.flows.append(flow)
 
         self._n_init = n_init
         self._max_age = max_age
@@ -138,6 +145,7 @@ class Track:
         self.mean, self.covariance = kf.update(
             self.mean, self.covariance, detection.to_xyah())
         self.features.append(detection.feature)
+        self.flows.append(detection.flow)
 
         self.hits += 1
         self.time_since_update = 0

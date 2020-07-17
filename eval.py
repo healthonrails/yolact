@@ -323,9 +323,11 @@ def prep_display(dets_out, img, h, w, undo_transform=True,
                     if args.mot and ('_1' in _class or '_2' in _class):
                         id = identities[j]
                         #id = min(num_boxes,min(int(identities[j]),int(_class.split('_')[-1])))
-                        text_str = f"Instance ID: {id} {_class.split('_')[0]}"
+                        #id = min(int(identities[j]),int(_class.split('_')[-1]))
+                        _class_name = _class.split('_')[0]
+                        text_str = f"Instance ID: {id}"
 
-                        #_save_bbox_image(boxes[j, :],img.cpu().numpy(),_class)
+                        _save_bbox_image(boxes[j, :],img.cpu().numpy(),_class)
                     
                 if not args.mot:
                     text_str = f"Instance ID: {1} {text_str}"
@@ -724,6 +726,7 @@ def evalvideo(net:Yolact, path:str, out_path:str=None):
     
     # If the input image size is constant, this make things faster (hence why we can use it in a video setting).
     cudnn.benchmark = True
+    print('Starting evalulate video frames ....')
     
     if is_webcam:
         vid = cv2.VideoCapture(int(path))
@@ -774,16 +777,18 @@ def evalvideo(net:Yolact, path:str, out_path:str=None):
             frames.append(frame)
         return frames
 
-    if False:
-        current_frame = get_next_frame(vid)
+    flows = None
         
-        next_frame = get_next_frame(vid)
-        flows = cv2.calcOpticalFlowFarneback(cv2.cvtColor(current_frame[0],cv2.COLOR_BGR2GRAY)
-        ,cv2.cvtColor(next_frame[0],cv2.COLOR_BGR2GRAY)
-        , None, 0.5, 3, 15, 3, 5, 1.2, 0)
-        current_frame = next_frame
-
     def transform_frame(frames):
+        frame_cpu = frames[0]
+        nonlocal flows
+        gray_prev_frame = cv2.cvtColor(prev_frame[0],cv2.COLOR_BGR2GRAY)
+        gray_current_frame = cv2.cvtColor(frame_cpu,cv2.COLOR_BGR2GRAY)
+        flows = cv2.calcOpticalFlowFarneback(gray_prev_frame
+        , gray_current_frame
+        , None, 0.5, 3, 15, 3, 5, 1.2, 0)
+        prev_frame[0] = frame_cpu
+
         with torch.no_grad():
             frames = [torch.from_numpy(frame).cuda().float() for frame in frames]
             return frames, transform(torch.stack(frames, 0))
@@ -805,11 +810,13 @@ def evalvideo(net:Yolact, path:str, out_path:str=None):
             frame, preds = inp
             return prep_display(preds, frame, None, None, undo_transform=False, 
             class_color=True, fps_str=fps_str,
-            flows=None
+            flows=flows
             )
+            
 
     frame_buffer = Queue()
     video_fps = 0
+    
 
     # All this timing code to make sure that 
     def play_video():
@@ -824,7 +831,6 @@ def evalvideo(net:Yolact, path:str, out_path:str=None):
 
             while running:
                 frame_time_start = time.time()
-
                 if not frame_buffer.empty():
                     next_time = time.time()
                     if last_time is not None:
@@ -890,7 +896,9 @@ def evalvideo(net:Yolact, path:str, out_path:str=None):
     # Prime the network on the first frame because I do some thread unsafe things otherwise
     print('Initializing model... ', end='')
 
-    first_batch = eval_network(transform_frame(get_next_frame(vid)))
+    prev_frame = get_next_frame(vid)
+    first_batch = eval_network(transform_frame(prev_frame))
+    print('First Frame',prev_frame[0].shape)
     print('Done.')
 
     # For each frame the sequence of functions it needs to go through to be processed (in reversed order)
@@ -898,6 +906,7 @@ def evalvideo(net:Yolact, path:str, out_path:str=None):
     pool = ThreadPool(processes=len(sequence) + args.video_multiframe + 2)
     pool.apply_async(play_video)
     active_frames = [{'value': extract_frame(first_batch, i), 'idx': 0} for i in range(len(first_batch[0]))]
+    
 
     print()
     if out_path is None: print('Press Escape to close.')
@@ -922,6 +931,7 @@ def evalvideo(net:Yolact, path:str, out_path:str=None):
                     _args =  [frame['value']]
                     if frame['idx'] == 0:
                         _args.append(fps_str)
+                    #_args.append(prev_frame[0])
                     frame['value'] = pool.apply_async(sequence[frame['idx']], args=_args)
                 
                 # For each frame whose job was the last in the sequence (i.e. for all final outputs)

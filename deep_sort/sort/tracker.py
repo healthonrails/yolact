@@ -5,7 +5,7 @@ from . import kalman_filter
 from . import linear_assignment
 from . import iou_matching
 from .track import Track
-
+from filterpy.kalman import UnscentedKalmanFilter
 
 class Tracker:
     """
@@ -44,6 +44,7 @@ class Tracker:
         self.n_init = n_init
 
         self.kf = kalman_filter.KalmanFilter()
+        #self.kf = UnscentedKalmanFilter(dim_x=)
         self.tracks = []
         self._next_id = 1
 
@@ -80,26 +81,33 @@ class Tracker:
 
         # Update distance metric.
         active_targets = [t.track_id for t in self.tracks if t.is_confirmed()]
-        features, targets = [], []
+        features, targets, flows, _targets = [], [],[],[]
         for track in self.tracks:
             if not track.is_confirmed():
                 continue
             features += track.features
+            flows += track.flows
             targets += [track.track_id for _ in track.features]
+            _targets += [track.track_id for _ in track.flows]
             track.features = []
+            track.flows = []
         self.metric.partial_fit(
             np.asarray(features), np.asarray(targets), active_targets)
 
     def _match(self, detections):
 
         def gated_metric(tracks, dets, track_indices, detection_indices):
-            features = np.array([dets[i].feature for i in detection_indices])
+            #features = np.array([dets[i].feature + np.sum(dets[i].flow) for i in detection_indices])
+            features = np.array([sorted(dets[i].flow.reshape(-1),reverse=True)[:256] + sorted(dets[i].feature,reverse=True)[:256]  for i in detection_indices])
+
+            features = np.abs(features)
+            #flows = np.array([dets[i].flow for i in detection_indices])
+            #assert len(features) == len(flows)
             targets = np.array([tracks[i].track_id for i in track_indices])
             cost_matrix = self.metric.distance(features, targets)
             cost_matrix = linear_assignment.gate_cost_matrix(
                 self.kf, cost_matrix, tracks, dets, track_indices,
                 detection_indices)
-
             return cost_matrix
 
         # Split track set into confirmed and unconfirmed tracks.
