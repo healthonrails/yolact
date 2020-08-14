@@ -28,9 +28,9 @@ from PIL import Image
 
 import pandas as pd
 
-res = []
+output_results = []
 
-
+frame_count = 0
 os.environ['KMP_DUPLICATE_LIB_OK']='True'
 
 import matplotlib.pyplot as plt
@@ -179,6 +179,7 @@ def prep_display(dets_out, img, h, w, undo_transform=True,
     """
     Note: If undo_transform=False then im_h and im_w are allowed to be None.
     """
+    global frame_count
     if undo_transform:
         img_numpy = undo_image_transformation(img, w, h)
         img_gpu = torch.Tensor(img_numpy).cuda()
@@ -202,17 +203,17 @@ def prep_display(dets_out, img, h, w, undo_transform=True,
             masks = t[3][idx]
         classes, scores, boxes = [x[idx].cpu().numpy() for x in t[:3]]
         
-        outputs = tracker.update(boxes, scores, img.cpu().numpy(),flows=flows,xyxy=True)
+        #outputs = tracker.update(boxes, scores, img.cpu().numpy(),flows=flows,xyxy=True)
  
         
         # detections = [[*box,scores[i]] for i,box in enumerate(boxes)]
         # outputs = mot_tracker.update(np.array(detections))
 
-        if len(outputs) > 0:
-            identities = outputs[:,-1]
-            #boxes = outputs[:,0:-1]
-        else:
-            identities = []
+        # if len(outputs) > 0:
+        #     identities = outputs[:,-1]
+        #     #boxes = outputs[:,0:-1]
+        # else:
+        #     identities = []
 
         #print(f"outputs: {outputs}")
 
@@ -226,7 +227,16 @@ def prep_display(dets_out, img, h, w, undo_transform=True,
     # Also keeps track of a per-gpu color cache for maximum speed
     def get_color(j, on_gpu=None):
         global color_cache
-        color_idx = (j * 5 if class_color else j * 5) % len(COLORS)
+        #color_idx = (j * 5 if class_color else j * 5) % len(COLORS)
+        _class = cfg.dataset.class_names[classes[j]]
+        if '_' in _class:
+            try:
+                color_idx = int(_class.split('_')[-1])
+            except ValueError:
+                color_idx = j
+        else:
+            color_idx = -1
+
         #print(f"num of class : {classes} and {color_idx}")
         if on_gpu is not None and color_idx in color_cache[on_gpu]:
             return color_cache[on_gpu][color_idx]
@@ -288,8 +298,9 @@ def prep_display(dets_out, img, h, w, undo_transform=True,
         text_color = [255, 255, 255]
 
         cv2.putText(img_numpy, fps_str, text_pt, font_face, font_scale, text_color, font_thickness, cv2.LINE_AA)
-    
+
     if num_dets_to_consider == 0:
+        output_results.append((frame_count,None,None,None,None,None,None))
         return img_numpy
 
     if args.display_text or args.display_bboxes:
@@ -305,7 +316,7 @@ def prep_display(dets_out, img, h, w, undo_transform=True,
             except:
                 score = 0
 
-            if args.display_bboxes and upper_bound < 900:
+            if args.display_bboxes and upper_bound < 9000:
                 cv2.rectangle(img_numpy, (x1, y1), (x2, y2), color, 1)
 
             if args.display_text:
@@ -314,20 +325,25 @@ def prep_display(dets_out, img, h, w, undo_transform=True,
                 except:
                     _class = cfg.dataset.class_names[classes[0]]
 
+                #print(frame_count, (x1,y1,x2,y2,_class,score))
+                output_results.append((frame_count,x1,y1,x2,y2,_class,score))
+                #print(res)
+
                 text_str = '%s: %.2f' % (_class, score) if args.display_scores else _class
                 
                 
                 
-                if len(identities) > 0 and len(identities) == len(scores):
-                    res.append((identities[j],_class,score,(x1,y1,x2,y2)))
-                    if args.mot and ('_1' in _class or '_2' in _class):
-                        id = identities[j]
-                        #id = min(num_boxes,min(int(identities[j]),int(_class.split('_')[-1])))
-                        #id = min(int(identities[j]),int(_class.split('_')[-1]))
-                        _class_name = _class.split('_')[0]
-                        text_str = f"Instance ID: {id}"
+                # if len(identities) > 0 and len(identities) == len(scores):
+                #     res.append((identities[j],_class,score,(x1,y1,x2,y2)))
+                if args.mot and ('_1' in _class or '_2' in _class):
+                    #id = identities[j]
+                    #id = min(num_boxes,min(int(identities[j]),int(_class.split('_')[-1])))
+                    #id = min(int(identities[j]),int(_class.split('_')[-1]))
+                    _class_name = _class.split('_')[0]
+                    #text_str = f"Instance ID: {_class}"
+                    text_str = _class
 
-                        _save_bbox_image(boxes[j, :],img.cpu().numpy(),_class)
+                    #_save_bbox_image(boxes[j, :],img.cpu().numpy(),_class)
                     
                 if not args.mot:
                     text_str = f"Instance ID: {1} {text_str}"
@@ -345,7 +361,7 @@ def prep_display(dets_out, img, h, w, undo_transform=True,
                 cv2.rectangle(img_numpy, (x1, y1), (x1 + text_w, y1 - text_h - 4), color, -1)
                 cv2.putText(img_numpy, text_str, text_pt, font_face, font_scale, text_color, font_thickness, cv2.LINE_AA)
             
-    
+    frame_count += 1
     return img_numpy
 
 def prep_benchmark(dets_out, h, w):
@@ -781,13 +797,13 @@ def evalvideo(net:Yolact, path:str, out_path:str=None):
         
     def transform_frame(frames):
         frame_cpu = frames[0]
-        nonlocal flows
-        gray_prev_frame = cv2.cvtColor(prev_frame[0],cv2.COLOR_BGR2GRAY)
-        gray_current_frame = cv2.cvtColor(frame_cpu,cv2.COLOR_BGR2GRAY)
-        flows = cv2.calcOpticalFlowFarneback(gray_prev_frame
-        , gray_current_frame
-        , None, 0.5, 3, 15, 3, 5, 1.2, 0)
-        prev_frame[0] = frame_cpu
+        #nonlocal flows
+        # gray_prev_frame = cv2.cvtColor(prev_frame[0],cv2.COLOR_BGR2GRAY)
+        # gray_current_frame = cv2.cvtColor(frame_cpu,cv2.COLOR_BGR2GRAY)
+        # flows = cv2.calcOpticalFlowFarneback(gray_prev_frame
+        # , gray_current_frame
+        # , None, 0.5, 3, 15, 3, 5, 1.2, 0)
+        #prev_frame[0] = frame_cpu
 
         with torch.no_grad():
             frames = [torch.from_numpy(frame).cuda().float() for frame in frames]
@@ -853,6 +869,7 @@ def evalvideo(net:Yolact, path:str, out_path:str=None):
 
                         print('\rProcessing Frames  %s %6d / %6d (%5.2f%%)    %5.2f fps        '
                             % (repr(progress_bar), frames_displayed, num_frames, progress, fps), end='')
+                       
 
                 
                 # This is split because you don't want savevideo to require cv2 display functionality (see #197)
@@ -896,9 +913,9 @@ def evalvideo(net:Yolact, path:str, out_path:str=None):
     # Prime the network on the first frame because I do some thread unsafe things otherwise
     print('Initializing model... ', end='')
 
-    prev_frame = get_next_frame(vid)
-    first_batch = eval_network(transform_frame(prev_frame))
-    print('First Frame',prev_frame[0].shape)
+    #prev_frame = get_next_frame(vid)
+    first_batch = eval_network(transform_frame(get_next_frame(vid)))
+    #print('First Frame',prev_frame[0].shape)
     print('Done.')
 
     # For each frame the sequence of functions it needs to go through to be processed (in reversed order)
@@ -909,12 +926,15 @@ def evalvideo(net:Yolact, path:str, out_path:str=None):
     
 
     print()
-    if out_path is None: print('Press Escape to close.')
+    if out_path is None: 
+        print('Press Escape to close.')
     try:
         while vid.isOpened() and running:
             # Hard limit on frames in buffer so we don't run out of memory >.>
             while frame_buffer.qsize() > 100:
                 time.sleep(0.001)
+            
+
 
             start_time = time.time()
 
@@ -923,7 +943,7 @@ def evalvideo(net:Yolact, path:str, out_path:str=None):
                 next_frames = pool.apply_async(get_next_frame, args=(vid,))
             else:
                 next_frames = None
-            
+
             if not (vid_done and len(active_frames) == 0):
                 # For each frame in our active processing queue, dispatch a job
                 # for that frame using the current function in the sequence
@@ -959,6 +979,8 @@ def evalvideo(net:Yolact, path:str, out_path:str=None):
                         vid_done = True
                     else:
                         active_frames.append({'value': frames, 'idx': len(sequence)-1})
+                else:
+                    vid_done = True
 
                 # Compute FPS
                 frame_times.add(time.time() - start_time)
@@ -969,10 +991,19 @@ def evalvideo(net:Yolact, path:str, out_path:str=None):
             fps_str = 'Processing FPS: %.2f | Video Playback FPS: %.2f | Frames in Buffer: %d' % (fps, video_fps, frame_buffer.qsize())
             if not args.display_fps:
                 print('\r' + fps_str + '    ', end='')
+        
+            if next_frames is None:
+                vid_done = True
+                cleanup_and_exit()
 
     except KeyboardInterrupt:
         print('\nStopping...')
+    finally:
     
+        df = pd.DataFrame(output_results)
+        df.columns = ['frame_count','x1','y1','x2','y2','instance_name','score']
+        print("write the results to a csv file...")
+        df.to_csv('tracking_results.csv')
     cleanup_and_exit()
 
 def evaluate(net:Yolact, dataset, train_mode=False):
@@ -1166,7 +1197,7 @@ if __name__ == '__main__':
         args.trained_model = SavePath.get_latest('weights', cfg.name)
 
     if args.config is None:
-        pint(args.config)
+        print(args.config)
         model_path = SavePath.from_str(args.trained_model)
         # TODO: Bad practice? Probably want to do a name lookup instead.
         args.config = model_path.model_name + '_config'
@@ -1216,9 +1247,9 @@ if __name__ == '__main__':
 
         evaluate(net, dataset)
 
-    df = pd.DataFrame(res)
-    print("write the results to a csv file...")
-    df.to_csv('tracking_results.csv')
+
+
+
 
 
 
