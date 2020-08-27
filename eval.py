@@ -36,18 +36,6 @@ os.environ['KMP_DUPLICATE_LIB_OK']='True'
 import matplotlib.pyplot as plt
 import cv2
 
-### Test for tracking the detected objects
-from utils.parser import get_config
-from deep_sort import build_tracker
-from deep_sort.sort import sort
-
-
-mot_tracker = sort.Sort(max_age=70,min_hits=3)
-
-cfg_tracker = get_config()
-tracker = None
-
-
 def str2bool(v):
     if v.lower() in ('yes', 'true', 't', 'y', '1'):
         return True
@@ -145,14 +133,6 @@ def parse_args(argv=None):
 
     global args
     args = parser.parse_args(argv)
-
-    cfg_tracker.merge_from_file(args.config_detection)
-    cfg_tracker.merge_from_file(args.config_deepsort)
-    
-    global tracker
-
-    tracker = build_tracker(cfg_tracker,use_cuda=args.cuda)
-
     if args.output_web_json:
         args.output_coco_json = True
     
@@ -166,7 +146,7 @@ color_cache = defaultdict(lambda: {})
 
 def _save_bbox_image(bbox_xyxy, ori_img, 
       class_name,
-     data_dir='reid_dataset'):
+     data_dir='bbox_dataset'):
     class_folder = os.path.join(data_dir,class_name)
     if not os.path.exists(class_folder):
         os.makedirs(class_folder)
@@ -202,21 +182,6 @@ def prep_display(dets_out, img, h, w, undo_transform=True,
             # Masks are drawn on the GPU, so don't copy
             masks = t[3][idx]
         classes, scores, boxes = [x[idx].cpu().numpy() for x in t[:3]]
-        
-        #outputs = tracker.update(boxes, scores, img.cpu().numpy(),flows=flows,xyxy=True)
- 
-        
-        # detections = [[*box,scores[i]] for i,box in enumerate(boxes)]
-        # outputs = mot_tracker.update(np.array(detections))
-
-        # if len(outputs) > 0:
-        #     identities = outputs[:,-1]
-        #     #boxes = outputs[:,0:-1]
-        # else:
-        #     identities = []
-
-        #print(f"outputs: {outputs}")
-
     num_dets_to_consider = min(args.top_k, classes.shape[0])
     for j in range(num_dets_to_consider):
         if scores[j] < args.score_threshold:
@@ -234,6 +199,8 @@ def prep_display(dets_out, img, h, w, undo_transform=True,
                 color_idx = int(_class.split('_')[-1])
             except ValueError:
                 color_idx = j
+        elif _class[-1].isdigit():
+            color_idx = int(_class[-1])
         else:
             color_idx = -1
 
@@ -335,7 +302,7 @@ def prep_display(dets_out, img, h, w, undo_transform=True,
                 
                 # if len(identities) > 0 and len(identities) == len(scores):
                 #     res.append((identities[j],_class,score,(x1,y1,x2,y2)))
-                if args.mot and ('_1' in _class or '_2' in _class):
+                if args.mot: # and ('_1' in _class or '_2' in _class):
                     #id = identities[j]
                     #id = min(num_boxes,min(int(identities[j]),int(_class.split('_')[-1])))
                     #id = min(int(identities[j]),int(_class.split('_')[-1]))
