@@ -192,7 +192,7 @@ def prep_display(dets_out, img, h, w, undo_transform=True,
     # Also keeps track of a per-gpu color cache for maximum speed
     def get_color(j, on_gpu=None):
         global color_cache
-        #color_idx = (j * 5 if class_color else j * 5) % len(COLORS)
+        
         _class = cfg.dataset.class_names[classes[j]]
         if '_' in _class:
             try:
@@ -202,7 +202,7 @@ def prep_display(dets_out, img, h, w, undo_transform=True,
         elif _class[-1].isdigit():
             color_idx = int(_class[-1])
         else:
-            color_idx = -1
+            color_idx = (j * 5 if class_color else j * 5) % len(COLORS)
 
         #print(f"num of class : {classes} and {color_idx}")
         if on_gpu is not None and color_idx in color_cache[on_gpu]:
