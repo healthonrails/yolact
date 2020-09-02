@@ -149,7 +149,7 @@ def get_out_video_name(video_path):
         inp, out_video_file = video_path.split(':')
     else:
         out_video_file = os.path.basename(video_path)
-    return out_video_file
+    return os.path.splitext(out_video_file)[0]
 
 
 
