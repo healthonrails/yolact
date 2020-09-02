@@ -120,10 +120,10 @@ def parse_args(argv=None):
                         help='When displaying / saving video, draw the FPS on the frame')
     parser.add_argument('--emulate_playback', default=False, dest='emulate_playback', action='store_true',
                         help='When saving a video, emulate the framerate that you\'d get running in real-time mode.')
-    parser.add_argument('--config_detection',type=str,default=r"C:\Users\hinde\Desktop\yolact\configs\yolov3.yaml")
-    parser.add_argument('--config_deepsort',type=str, default=r"C:\Users\hinde\Desktop\yolact\configs\deep_sort.yaml")
     parser.add_argument('--mot',default=False, dest='mot', action='store_true',
                         help="Multi Object Tracking")
+    parser.add_argument('--save_bbox_images',default=False, type=str2bool,
+                        help="The default folder will be in results/video_file_name/class_names/")
 
                     
 
@@ -144,15 +144,25 @@ coco_cats = {} # Call prep_coco_cats to fill this
 coco_cats_inv = {}
 color_cache = defaultdict(lambda: {})
 
-def _save_bbox_image(bbox_xyxy, ori_img, 
+def get_out_video_name(video_path):
+    if ':' in video_path:
+        inp, out_video_file = video_path.split(':')
+    else:
+        out_video_file = os.path.basename(video_path)
+    return out_video_file
+
+
+
+def _save_bbox_image(frame_number, bbox_xyxy, ori_img, 
       class_name,
-     data_dir='bbox_dataset'):
+     video_file_name='my_video'):
+    data_dir = os.path.join('results',video_file_name)
     class_folder = os.path.join(data_dir,class_name)
     if not os.path.exists(class_folder):
         os.makedirs(class_folder)
     x1,y1,x2,y2 = bbox_xyxy
     im = ori_img[y1:y2,x1:x2]
-    cv2.imwrite(f"{class_folder}/{x1}_{y1}_{x2}_{y2}.jpg",im)
+    cv2.imwrite(f"{class_folder}/{frame_count: 08}_{x1}_{y1}_{x2}_{y2}.jpg",im)
 
 def prep_display(dets_out, img, h, w, undo_transform=True,
  class_color=True, mask_alpha=0.45, fps_str='',flows=None):
@@ -198,7 +208,7 @@ def prep_display(dets_out, img, h, w, undo_transform=True,
             try:
                 color_idx = int(_class.split('_')[-1])
             except ValueError:
-                color_idx = j
+                color_idx = j 
         elif _class[-1].isdigit():
             color_idx = int(_class[-1])
         else:
@@ -302,16 +312,18 @@ def prep_display(dets_out, img, h, w, undo_transform=True,
                 
                 # if len(identities) > 0 and len(identities) == len(scores):
                 #     res.append((identities[j],_class,score,(x1,y1,x2,y2)))
-                if args.mot: # and ('_1' in _class or '_2' in _class):
-                    #id = identities[j]
-                    #id = min(num_boxes,min(int(identities[j]),int(_class.split('_')[-1])))
-                    #id = min(int(identities[j]),int(_class.split('_')[-1]))
+                if args.mot:
                     _class_name = _class.split('_')[0]
-                    #text_str = f"Instance ID: {_class}"
-                    text_str = _class
+                    text_str = f"{_class} {score: .2f}"
 
-                    #_save_bbox_image(boxes[j, :],img.cpu().numpy(),_class)
-                    
+                if args.save_bbox_images:
+                    out_video_file = get_out_video_name(args.video)
+                    _save_bbox_image(frame_count, boxes[j, :],
+                             img.cpu().numpy(),
+                             _class,
+                             out_video_file
+                             )
+                
                 if not args.mot:
                     text_str = f"Instance ID: {1} {text_str}"
 
@@ -740,7 +752,14 @@ def evalvideo(net:Yolact, path:str, out_path:str=None):
     frames_displayed = 0
 
     if out_path is not None:
-        out = cv2.VideoWriter(out_path, cv2.VideoWriter_fourcc(*"mp4v"), target_fps, (frame_width, frame_height))
+        if 'results' not in out_path:
+            video_name = get_out_video_name(args.video)
+            video_out_path = os.path.join('results', video_name)
+            if not os.path.exists(video_out_path):
+                os.makedirs(video_out_path)
+            out = cv2.VideoWriter(os.path.join(video_out_path,out_path), cv2.VideoWriter_fourcc(*"mp4v"), target_fps, (frame_width, frame_height))
+        else:
+            out = cv2.VideoWriter(out_path, cv2.VideoWriter_fourcc(*"mp4v"), target_fps, (frame_width, frame_height))
 
     def cleanup_and_exit():
         print()
@@ -968,9 +987,13 @@ def evalvideo(net:Yolact, path:str, out_path:str=None):
     finally:
     
         df = pd.DataFrame(output_results)
-        df.columns = ['frame_count','x1','y1','x2','y2','instance_name','score']
+        df.columns = ['frame_number','x1','y1','x2','y2','instance_name','score']
         print("write the results to a csv file...")
-        df.to_csv('tracking_results.csv')
+        out_video_file = get_out_video_name(args.video)
+        out_csv_dir = os.path.join('results',out_video_file)
+        if not os.path.exists(out_csv_dir):
+            os.makedirs(out_csv_dir)
+        df.to_csv(f'{out_csv_dir}{os.sep}tracking_results.csv')
     cleanup_and_exit()
 
 def evaluate(net:Yolact, dataset, train_mode=False):
