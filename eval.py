@@ -278,6 +278,7 @@ def prep_display(dets_out, img, h, w, undo_transform=True,
 
     if num_dets_to_consider == 0:
         output_results.append((frame_count,None,None,None,None,None,None))
+        frame_count += 1
         return img_numpy
 
     if args.display_text or args.display_bboxes:
