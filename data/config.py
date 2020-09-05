@@ -1,6 +1,7 @@
 from backbone import ResNetBackbone, VGGBackbone, ResNetBackboneGN, DarkNetBackbone
 from math import sqrt
 import torch
+import os
 
 # for making bounding boxes pretty
 COLORS = ((244,  67,  54),
@@ -814,12 +815,35 @@ def set_cfg(config_name:str):
     """ Sets the active config. Works even if cfg is already imported! """
     global cfg
 
-    # Note this is not just an eval because I'm lazy, but also because it can
+    # Note this can
     # be used like ssd300_config.copy({'max_size': 400}) for extreme fine-tuning
-    cfg.replace(eval(config_name))
+    if os.path.isfile(config_name):
+        from  annolid.utils.config import  get_config
+        custom_config = get_config(config_name)
+        custom_dataset = dataset_base.copy({
+            'name': custom_config.DATASET.name,
+            'train_info': custom_config.DATASET.train_info,
+            'train_images': custom_config.DATASET.train_images,
+            'valid_info': custom_config.DATASET.valid_info,
+            'valid_images': custom_config.DATASET.valid_images,
+            'class_names': custom_config.DATASET.class_names,
+        })
+        yolact_resnet50_custom_config = yolact_resnet50_config.copy({
+            'name': custom_config.YOLACT.name,
+            'dataset': custom_dataset,
+            'name_classes': len(custom_dataset.class_names) + 1,
+            'max_size': custom_config.YOLACT.max_size
+        })
+        cfg.name = custom_config.YOLACT.name
+        cfg.replace(yolact_resnet50_custom_config)
+    else:
+        cfg.replace(eval(config_name))
 
     if cfg.name is None:
         cfg.name = config_name.split('_config')[0]
+
+
+
 
 def set_dataset(dataset_name:str):
     """ Sets the dataset of the current config. """
