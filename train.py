@@ -300,7 +300,6 @@ def train():
                     break
 
                 if epoch == 0 and iteration == 1:
-                    writer.add_graph(net)
                     grid = torchvision.utils.make_grid(datum[0])
                     writer.add_image("images", grid, 0)
 
