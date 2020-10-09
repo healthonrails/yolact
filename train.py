@@ -26,12 +26,10 @@ import datetime
 import torchvision
 from torch.utils.tensorboard import SummaryWriter
 import eval as eval_script
+from annolid.detector.yolov5.utils import google_utils
 
-
-log_dir = here / 'runs'
+log_dir = here.parent.parent.parent / 'runs' / 'logs'
 log_dir.mkdir(exist_ok=True, parents=True)
-print(str(here))
-
 writer = SummaryWriter(log_dir=str(log_dir))
 
 
@@ -233,8 +231,17 @@ def train():
             args.start_iter = SavePath.from_str(args.resume).iteration
     else:
         print('Initializing weights...')
+        Path(args.save_folder).mkdir(exist_ok=True,parents=True)
+        backbone_pth_file = Path(args.save_folder) / cfg.backbone.path
+        if not backbone_pth_file.exists():
+            """
+            https://drive.google.com/file/d/1Jy3yCdbatgXa5YYIdTCRrSV0S9V5g1rn/view?usp=sharing
+            """
+            google_utils.gdrive_download(
+                id='1Jy3yCdbatgXa5YYIdTCRrSV0S9V5g1rn',
+                name=str(backbone_pth_file))
         yolact_net.init_weights(
-            backbone_path=args.save_folder + cfg.backbone.path)
+            backbone_path=str(backbone_pth_file))
 
     optimizer = optim.SGD(net.parameters(), lr=args.lr, momentum=args.momentum,
                           weight_decay=args.decay)
