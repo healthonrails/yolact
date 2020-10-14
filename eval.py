@@ -1,3 +1,8 @@
+from pathlib import Path
+import os
+import sys
+here = Path(__file__).parent.resolve()
+sys.path.append(str(here))
 from multiprocessing.pool import ThreadPool
 from queue import Queue
 import cv2
@@ -24,9 +29,7 @@ import random
 import cProfile
 import pickle
 import json
-import os
 from collections import defaultdict
-from pathlib import Path
 from collections import OrderedDict
 from PIL import Image
 
@@ -1217,8 +1220,7 @@ def print_maps(all_maps):
     print(make_sep(len(all_maps['box']) + 1))
     print()
 
-
-if __name__ == '__main__':
+def main():
     parse_args()
 
     if args.config is not None:
@@ -1279,3 +1281,7 @@ if __name__ == '__main__':
             net = net.cuda()
 
         evaluate(net, dataset)
+
+
+if __name__ == '__main__':
+    main()
