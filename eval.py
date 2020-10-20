@@ -151,7 +151,9 @@ color_cache = defaultdict(lambda: {})
 
 
 def get_out_video_name(video_path):
-    if ':' in video_path:
+    if '|' in video_path:
+        inp, out_video_file = video_path.split('|')
+    elif ':' in video_path:
         inp, out_video_file = video_path.split(':')
     else:
         out_video_file = os.path.basename(video_path)
@@ -1051,7 +1053,10 @@ def evaluate(net: Yolact, dataset, train_mode=False):
         evalimages(net, inp, out)
         return
     elif args.video is not None:
-        if ':' in args.video:
+        if '|' in args.video:
+            inp, out = args.video.split('|')
+            evalvideo(net, inp, out)
+        elif ':' in args.video:
             inp, out = args.video.split(':')
             evalvideo(net, inp, out)
         else:
